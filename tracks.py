@@ -149,7 +149,9 @@ class TrackTableView(QTableView):
 			QMessageBox.warning(self, "No Matches", "No matches for your search query were found!")
 			return
 
-		QMessageBox.information(self, "Search Results", "The following songs were found:\n\n"+"\n".join(["%s: %s - %s" %(m+1, self.model.rows[m].get("Name", ""), self.model.rows[m].get("Artist", "")) for m in matches]))
+		for i in range(len(self.model.rows)+1):
+			if i not in matches:
+				self.hideRow(i)
 
 	def open_links(self):
 		indexes = self.selectionModel().selectedRows()
