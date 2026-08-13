@@ -18,7 +18,18 @@ STATE_OPTIONS = {
 	"Complete": {"key": "C", "color": "#262"},
 }
 
-HEADERS = ["Name", "Artist", "Musixmatch", "Genius", "Instrumental"]
+LYRIC_SITES = {
+	"Musixmatch": {
+		"key": "M",
+		"url": "https://www.musixmatch.com/search?query={query}"
+	},
+	"Genius": {
+		"key": "G",
+		"url": "https://genius.com/search?q={query}"
+	}
+}
+
+HEADERS = ["Name", "Artist", *LYRIC_SITES.keys(), "Instrumental"]
 
 def load_library(fp):
 	import plistlib
@@ -31,8 +42,7 @@ def load_library(fp):
 		data.append({
 			"Name": song.get('Name'),
 			"Artist": song.get('Artist'),
-			"Musixmatch": "Unknown",
-			"Genius": "Unknown",
+			**{site: "Unknown" for site in LYRIC_SITES.keys()},
 			"Instrumental": False
 		})
 
@@ -113,7 +123,7 @@ class TrackTableView(QTableView):
 			self.show_all_rows()
 			return
 
-		if key in ("M", "G"):
+		if key in [s["key"] for s in LYRIC_SITES.values()]:
 			self.parent.on_mode_change(key)
 			self.pending_action = key
 			return
@@ -123,8 +133,9 @@ class TrackTableView(QTableView):
 
 				for idx in indexes:
 					row = self.model.rows[idx.row()]
-					if self.pending_action != "G": row["Musixmatch"] = state
-					if self.pending_action != "M": row["Genius"] = state
+					for site in LYRIC_SITES.items():
+						if not self.pending_action or self.pending_action == site[1]["key"]:
+							row[site[0]] = state
 					self.model.dataChanged.emit(self.model.index(idx.row(), 0), self.model.index(idx.row(), len(HEADERS)-1))
 				self.on_change()
 				self.parent.on_mode_change(None)
@@ -168,13 +179,18 @@ class TrackTableView(QTableView):
 
 			query = urllib.parse.quote_plus(re.sub(r"[\(\)]", "", f"{artist.split(" & ")[0].split(", ")[0]} {name}"))
 
-			webbrowser.open(f"https://www.musixmatch.com/search?query={query}")
-			webbrowser.open(f"https://genius.com/search?q={query}")
+			for s in LYRIC_SITES.values():
+				webbrowser.open(s["url"].replace("{query}", query))
 
 	def hide_complete_rows(self):
 		i = 0
 		for row in self.model.rows:
-			if row["Musixmatch"] == "Complete" and row["Genius"] == "Complete":
+			complete = True
+			for site in LYRIC_SITES.keys():
+				if row[site] != "Complete":
+					complete = False
+
+			if complete:
 				self.hideRow(i)
 
 			i += 1
@@ -202,25 +218,32 @@ class TrackTableModel(QAbstractTableModel):
 		row = self.rows[index.row()]
 		col = HEADERS[index.column()]
 
-		m = row.get("Musixmatch")
-		g = row.get("Genius")
-		i = row.get("Instrumental")
+		instrumental = row.get("Instrumental")
 
 		if role == Qt.DisplayRole:
 			if col == "Instrumental":
-				return "✔" if i else "⊗"
+				return "✔" if instrumental else "⊗"
 			return str(row.get(col, ""))
 
 		if role == Qt.BackgroundRole:
-			if i:
+			if instrumental:
 				return None
 			
 			gradient = QLinearGradient(QPointF(0.0, 0.0), QPointF(1.0, 0.0))
-			gradient.setColorAt(0.25, STATE_OPTIONS[m]['color'])
-			gradient.setColorAt(0.75, STATE_OPTIONS[g]['color'])
+			colors = []
+			for site in LYRIC_SITES.keys():
+				colors.append(STATE_OPTIONS[row.get(site)]['color'])
+
+			start = 0.25
+			end = 0.75
+			step = (end-start) / (len(colors)-1)
+			i = 0
+			for i in range(len(colors)):
+				gradient.setColorAt(start+(step*i), colors[i])
+
 			return QBrush(gradient)
 
-		if role == Qt.ForegroundRole and i:
+		if role == Qt.ForegroundRole and instrumental:
 			return QColor("#777")
 
 		return None
@@ -251,13 +274,19 @@ class ProgressWindow(QDialog):
 		layout = QVBoxLayout()
 
 		self.rows = rows
-		self.k = ["Known State", "Completed (Musixmatch)", "Completed (Genius)", "Completed (Both)"]
+
+		self.k = {
+			"known": "Known State",
+			**{site: f"Completed ({site})" for site in LYRIC_SITES.keys()},
+			"all": "Completed (All)"
+		}
+
 		self.labels = {key: QLabel() for key in self.k}
 		self.bars = {key: QProgressBar() for key in self.k}
 
 		for key in self.k:
 			box = QHBoxLayout()
-			box.addWidget(QLabel(key))
+			box.addWidget(QLabel(self.k[key]))
 			box.addWidget(self.labels[key])
 			box.setAlignment(Qt.AlignJustify)
 			layout.addLayout(box)
@@ -270,10 +299,11 @@ class ProgressWindow(QDialog):
 		total = len(self.rows)
 
 		progress = {
-		"Known State": len([r for r in self.rows if r.get("Instrumental") or r.get("Musixmatch") != "Unknown" and r.get("Genius") != "Unknown"]),
-		"Completed (Musixmatch)": len([r for r in self.rows if r.get("Musixmatch") == "Complete"]),
-		"Completed (Genius)": len([r for r in self.rows if r.get("Genius") == "Complete"]),
-		"Completed (Both)": len([r for r in self.rows if r.get("Musixmatch") == "Complete" and r.get("Genius") == "Complete"])
+			"known": len([r for r in self.rows if r.get("Instrumental") or all([r.get(site) != "Unknown" for site in LYRIC_SITES.keys()])]),
+			"all": len([r for r in self.rows if r.get("Instrumental") or all([r.get(site) == "Complete" for site in LYRIC_SITES.keys()])]),
+			**{
+				site: len([r for r in self.rows if r.get(site) == "Complete"]) for site in LYRIC_SITES.keys()
+			}
 		}
 
 		return progress
@@ -383,7 +413,12 @@ class App(QMainWindow):
 		help_text_layout = QVBoxLayout()
 		self.mode_label.setAlignment(Qt.AlignHCenter)
 		self.on_mode_change(None)
-		help_label = QLabel("Esc = Reset Filters/Mode, Tab = Show Incomplete Songs Only\nI = Toggle Instumental, M > ? = Set Musixmatch, G > ? = Set Genius\n" + ", ".join([v['key']+" = "+k for k,v in STATE_OPTIONS.items()]))
+
+		help_label = QLabel(
+			"Esc = Reset Filters/Mode, Tab = Show Incomplete Songs Only\nI = Toggle Instumental, " +
+			", ".join([f"{site[1]['key']} > ? = Set {site[0]}" for site in LYRIC_SITES.items()]) +
+			"\n" + ", ".join([v['key']+" = "+k for k,v in STATE_OPTIONS.items()])
+		)
 		help_label.setAlignment(Qt.AlignHCenter)
 		help_text_layout.addWidget(self.mode_label)
 		help_text_layout.addWidget(help_label)
@@ -406,7 +441,12 @@ class App(QMainWindow):
 			self.progress_window.update_progress()
 
 	def on_mode_change(self, mode):
-		self.mode_label.setText("Mode: Modify " + ("Musixmatch" if mode == "M" else "Genius" if mode == "G" else "Musixmatch + Genius"))
+		mode_label = "All"
+		for site in LYRIC_SITES.items():
+			if mode == site[1]["key"]:
+				mode_label = site[0]
+				break
+		self.mode_label.setText(f"Mode: Modify {mode_label}")
 
 	def show_progress(self):
 		if not self.progress_window:
