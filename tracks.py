@@ -142,7 +142,8 @@ class TrackTableView(QTableView):
 
 		matches = []
 		for i in range(len(self.model.rows)):
-			if query[0].lower() in self.model.rows[i].get("Name", "").lower():
+			row = self.model.rows[i]
+			if query[0].lower() in f"{row.get("Artist", "")} {row.get("Name", "")}".lower():
 				matches.append(i)
 
 		if not matches:
