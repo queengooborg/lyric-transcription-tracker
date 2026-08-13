@@ -22,7 +22,7 @@ HEADERS = ["Name", "Artist", "Musixmatch", "Genius", "Instrumental"]
 
 def load_library(fp):
 	import plistlib
-	with open("./Library.xml", 'rb') as f:
+	with open(fp or "./Library.xml", 'rb') as f:
 		library = plistlib.load(f)
 
 	data = []
@@ -289,7 +289,7 @@ class App(QMainWindow):
 
 	def load_csv(self):
 		if not os.path.exists('./tracks.csv'):
-			import_library()
+			self.import_library()
 			self.save(force=True)
 			return
 
@@ -302,8 +302,14 @@ class App(QMainWindow):
 				})
 
 	def import_library(self):
-		library_path = QFileDialog.getOpenFileName(self, "Open Apple Music Library.xml", "", "Library.xml")
+		library_path = QFileDialog.getOpenFileName(self, "Open Apple Music Library.xml", "", "Apple Music XML (*.xml)")[0]
+		
+		if not library_path:
+			return
+
 		new_data = load_library(library_path)
+
+		self.model.beginResetModel()
 
 		# Add rows, ignoring any duplicates
 		for new_row in new_data:
@@ -314,6 +320,8 @@ class App(QMainWindow):
 					break
 			if not match:
 				self.rows.append(new_row)
+
+		self.model.endResetModel()
 
 	def init_ui(self):
 		layout = QVBoxLayout()
