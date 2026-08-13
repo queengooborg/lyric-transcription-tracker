@@ -387,6 +387,9 @@ class App(QMainWindow):
 		self.has_changes = False
 		self.save_timer.stop()
 
+		# Make a backup
+		os.rename('./tracks.csv', './tracks.csv.bak')
+
 		with open('./tracks.csv', 'w') as f:
 			writer = csv.DictWriter(f, fieldnames=HEADERS)
 			writer.writeheader()
