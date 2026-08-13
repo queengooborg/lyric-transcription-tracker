@@ -251,33 +251,40 @@ class ProgressWindow(QDialog):
 		layout = QVBoxLayout()
 
 		self.rows = rows
-		self.bars = {key: QProgressBar() for key in ["Known State", "Completed (Musixmatch)", "Completed (Genius)", "Completed (Both)"]}
+		self.k = ["Known State", "Completed (Musixmatch)", "Completed (Genius)", "Completed (Both)"]
+		self.labels = {key: QLabel() for key in self.k}
+		self.bars = {key: QProgressBar() for key in self.k}
 
-		for label in self.bars:
-			layout.addWidget(QLabel(label))
-			layout.addWidget(self.bars[label])
+		for key in self.k:
+			box = QHBoxLayout()
+			box.addWidget(QLabel(key))
+			box.addWidget(self.labels[key])
+			box.setAlignment(Qt.AlignJustify)
+			layout.addLayout(box)
+			layout.addWidget(self.bars[key])
 
 		self.setLayout(layout)
 		self.update_progress()
 
-	def update_progress(self):
+	def get_progress(self):
 		total = len(self.rows)
 
-		self.bars["Known State"].setValue(int(
-			len([r for r in self.rows if r.get("Instrumental") or r.get("Musixmatch") != "Unknown" and r.get("Genius") != "Unknown"]) / total * 100
-		))
+		progress = {
+		"Known State": len([r for r in self.rows if r.get("Instrumental") or r.get("Musixmatch") != "Unknown" and r.get("Genius") != "Unknown"]),
+		"Completed (Musixmatch)": len([r for r in self.rows if r.get("Musixmatch") == "Complete"]),
+		"Completed (Genius)": len([r for r in self.rows if r.get("Genius") == "Complete"]),
+		"Completed (Both)": len([r for r in self.rows if r.get("Musixmatch") == "Complete" and r.get("Genius") == "Complete"])
+		}
 
-		self.bars["Completed (Musixmatch)"].setValue(int(
-			len([r for r in self.rows if r.get("Musixmatch") == "Complete"]) / total * 100
-		))
+		return progress
 
-		self.bars["Completed (Genius)"].setValue(int(
-			len([r for r in self.rows if r.get("Genius") == "Complete"]) / total * 100
-		))
+	def update_progress(self):
+		total = len(self.rows)
+		progress = self.get_progress()
 
-		self.bars["Completed (Both)"].setValue(int(
-			len([r for r in self.rows if r.get("Musixmatch") == "Complete" and r.get("Genius") == "Complete"]) / total * 100
-		))
+		for key in self.k:
+			self.labels[key].setText(f"{progress[key]} / {total} ({progress[key] / total * 100:0.2f}%)")
+			self.bars[key].setValue(int(progress[key] / total * 100))
 
 class App(QMainWindow):
 	def __init__(self):
