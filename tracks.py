@@ -90,6 +90,10 @@ class TrackTableView(QTableView):
 			self.open_links()
 			return
 
+		if event.key() == Qt.Key_Tab:
+			self.hide_complete_rows()
+			return
+
 		indexes = self.selectionModel().selectedRows()
 		if not indexes:
 			return
@@ -106,6 +110,7 @@ class TrackTableView(QTableView):
 		if event.matches(QKeySequence.StandardKey.Cancel):
 			self.parent.on_mode_change(None)
 			self.pending_action = None
+			self.show_all_rows()
 			return
 
 		if key in ("M", "G"):
@@ -162,6 +167,18 @@ class TrackTableView(QTableView):
 
 			webbrowser.open(f"https://www.musixmatch.com/search?query={query}")
 			webbrowser.open(f"https://genius.com/search?q={query}")
+
+	def hide_complete_rows(self):
+		i = 0
+		for row in self.model.rows:
+			if row["Musixmatch"] == "Complete" and row["Genius"] == "Complete":
+				self.hideRow(i)
+
+			i += 1
+
+	def show_all_rows(self):
+		for i in range(len(self.model.rows)):
+			self.showRow(i)
 
 class TrackTableModel(QAbstractTableModel):
 	def __init__(self, rows, on_change):
@@ -356,7 +373,7 @@ class App(QMainWindow):
 		help_text_layout = QVBoxLayout()
 		self.mode_label.setAlignment(Qt.AlignHCenter)
 		self.on_mode_change(None)
-		help_label = QLabel("I = Toggle Instumental, M > ? = Set Musixmatch, G > ? = Set Genius, Esc = Set Both\n" + ", ".join([v['key']+" = "+k for k,v in STATE_OPTIONS.items()]))
+		help_label = QLabel("Esc = Reset Filters/Mode, Tab = Show Incomplete Songs Only\nI = Toggle Instumental, M > ? = Set Musixmatch, G > ? = Set Genius\n" + ", ".join([v['key']+" = "+k for k,v in STATE_OPTIONS.items()]))
 		help_label.setAlignment(Qt.AlignHCenter)
 		help_text_layout.addWidget(self.mode_label)
 		help_text_layout.addWidget(help_label)
